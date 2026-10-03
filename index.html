@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ฟ้าตอนนี้</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@400;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+/* Layout: one column — big "now" panel, rain-next-2h strip, 24h scroller, 7-day list */
+:root{
+  --bg:#eef3f6; --panel:#ffffff; --ink:#14232e; --muted:#5b6d79; --line:#d6e0e6;
+  --accent:#0b7a8f; --rain:#2f6fd6; --warn:#c77700; --bad:#c2410c;
+  --display:"Bai Jamjuree","IBM Plex Sans Thai",system-ui,sans-serif;
+  --body:"IBM Plex Sans Thai",system-ui,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0d161c; --panel:#15222b; --ink:#e4eef3; --muted:#91a6b2; --line:#24353f;
+  --accent:#3cc3d6; --rain:#6ea2ff; --warn:#f0a43a; --bad:#ff7a45; color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--body);padding:16px;padding-block:20px 40px}
+.wrap{max-width:760px;margin:0 auto;display:grid;gap:16px}
+header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+h1{font:700 22px var(--display);margin:0;letter-spacing:.2px}
+.tools{display:flex;gap:8px;flex-wrap:wrap;flex:1;justify-content:flex-end;min-width:0}
+.search{position:relative;flex:1;min-width:180px;max-width:320px}
+input{width:100%;font:inherit;padding:9px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+button{font:600 14px var(--body);padding:9px 14px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+button:hover{border-color:var(--accent)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.results{position:absolute;top:100%;left:0;right:0;margin-top:4px;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;z-index:5}
+.results button{display:block;width:100%;text-align:left;border:0;border-radius:0;font-weight:400;border-bottom:1px solid var(--line)}
+.results small{color:var(--muted)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px}
+.now{display:grid;grid-template-columns:auto 1fr;gap:6px 20px;align-items:center}
+.place{grid-column:1/-1;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;color:var(--muted);font-size:13px}
+.place b{color:var(--ink);font-size:16px}
+.temp{font:700 72px/1 var(--display);letter-spacing:-2px;font-variant-numeric:tabular-nums}
+.temp sup{font-size:28px;letter-spacing:0;vertical-align:top;position:relative;top:8px}
+.cond{font:600 20px var(--display)}
+.feels{color:var(--muted)}
+.stats{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-top:10px}
+.stat{border-top:1px solid var(--line);padding-top:8px}
+.stat span{display:block;font-size:12px;color:var(--muted);letter-spacing:.3px}
+.stat b{font:600 18px var(--display);font-variant-numeric:tabular-nums}
+.pill{display:inline-block;font-size:12px;font-weight:600;padding:1px 8px;border-radius:99px;margin-left:4px;border:1px solid currentColor}
+h2{font:600 15px var(--display);margin:0 0 10px;color:var(--muted);letter-spacing:.3px}
+.rainmsg{font:600 17px var(--display);margin-bottom:10px}
+.bars{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;align-items:end;height:70px}
+.bar{background:var(--rain);border-radius:4px 4px 0 0;min-height:3px;opacity:.85}
+.bar.zero{background:var(--line);opacity:1}
+.barlbl{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;font-size:11px;color:var(--muted);text-align:center;margin-top:4px;font-variant-numeric:tabular-nums}
+.hours{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;scroll-snap-type:x proximity}
+.hr{flex:0 0 64px;text-align:center;padding:8px 4px;border-radius:12px;border:1px solid var(--line);scroll-snap-align:start}
+.hr .t{font-size:12px;color:var(--muted)}
+.hr .i{font-size:22px;line-height:1.4}
+.hr .d{font:600 16px var(--display);font-variant-numeric:tabular-nums}
+.hr .p{font-size:12px;color:var(--rain);font-weight:600;min-height:18px}
+.days{display:grid;gap:0}
+.day{display:grid;grid-template-columns:72px 30px 1fr 52px 110px;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+.day:first-child{border-top:0}
+.day .n{font-weight:600}
+.day .c{color:var(--muted);font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.day .p{color:var(--rain);font-weight:600;font-size:13px;text-align:right}
+.range{display:flex;gap:6px;align-items:center;justify-content:flex-end;font-size:14px}
+.range i{flex:1;height:5px;border-radius:9px;background:linear-gradient(90deg,var(--rain),var(--warn))}
+.range .lo{color:var(--muted)}
+.mapbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;margin-bottom:10px}
+.mapbar h2{margin:0}
+.mapbtns{display:flex;gap:6px;flex-wrap:wrap}
+.mapbtns button{padding:6px 10px;font-size:13px}
+.mapbtns button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+#map{height:420px;border-radius:12px;border:1px solid var(--line);background:var(--bg)}
+.maphint{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px;font-variant-numeric:tabular-nums}
+.tlabel{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:99px;padding:2px 8px;font:600 13px var(--display);white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.15);transform:translate(-50%,-50%);display:inline-block}
+.tlabel small{color:var(--rain);font-weight:600;margin-left:3px}
+.leaflet-container{font-family:var(--body)}
+:root{--r0:#9aa9b2;--r1:#7cc4f2;--r2:#2f6fd6;--r3:#7b3fd1;--r4:#d12f6a}
+.legend{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;font-size:12px;color:var(--muted);margin-top:6px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:-1px}
+.legend #staInfo{margin-left:auto}
+.stat.near{grid-column:1/-1}
+.stat.near b{font-size:15px}
+.pop b{font-family:var(--display)}
+.pop table{border-collapse:collapse;margin-top:4px;font-variant-numeric:tabular-nums}
+.pop td{padding:1px 8px 1px 0}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--panel);color:var(--ink)}
+@media (max-width:520px){#map{height:340px}}
+footer{font-size:12px;color:var(--muted);display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.err{color:var(--bad);font-weight:600}
+.live{display:inline-block;width:8px;height:8px;border-radius:50%;background:#22a35a;margin-right:6px;animation:pulse 2s infinite}
+@keyframes pulse{50%{opacity:.3}}
+@media (prefers-reduced-motion:reduce){.live{animation:none}}
+@media (max-width:520px){
+  .temp{font-size:58px}
+  .day{grid-template-columns:52px 26px 1fr 42px 92px;gap:6px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>ฟ้าตอนนี้</h1>
+    <div class="tools">
+      <div class="search">
+        <input id="q" type="search" placeholder="ค้นหาเมือง/เขต เช่น บางขุนเทียน" autocomplete="off">
+        <div class="results" id="results" hidden></div>
+      </div>
+      <button id="gps" type="button">📍 ตำแหน่งฉัน</button>
+      <button id="refresh" type="button">รีเฟรช</button>
+    </div>
+  </header>
+
+  <section class="panel now" id="now">
+    <div class="place"><b id="place">กำลังโหลด…</b><span id="updated"></span></div>
+    <div class="temp" id="temp">--<sup>°C</sup></div>
+    <div><div class="cond" id="cond">&nbsp;</div><div class="feels" id="feels">&nbsp;</div></div>
+    <div class="stats">
+      <div class="stat"><span>ความชื้น</span><b id="hum">–</b></div>
+      <div class="stat"><span>ลม</span><b id="wind">–</b></div>
+      <div class="stat"><span>ฝนชั่วโมงนี้</span><b id="precip">–</b></div>
+      <div class="stat"><span>UV</span><b id="uv">–</b></div>
+      <div class="stat"><span>PM2.5</span><b id="pm">–</b></div>
+      <div class="stat"><span>พระอาทิตย์ขึ้น / ตก</span><b id="sun">–</b></div>
+      <div class="stat near"><span>จุดวัดฝนจริงใกล้สุด</span><b id="near">–</b></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="mapbar">
+      <h2>แผนที่สภาพอากาศ</h2>
+      <div class="mapbtns">
+        <button id="tRadar" type="button" aria-pressed="true">เรดาร์ฝน</button>
+        <button id="tPlay" type="button" aria-pressed="true">▶ เล่นย้อนหลัง</button>
+        <button id="tTemp" type="button" aria-pressed="true">อุณหภูมิรอบๆ</button>
+        <button id="tSta" type="button" aria-pressed="true">จุดวัดฝนจริง</button>
+        <button id="tMode" type="button" aria-pressed="false">แสดง: 1 ชม.</button>
+      </div>
+    </div>
+    <div id="map"></div>
+    <div class="maphint"><span>แตะ/คลิกจุดบนแผนที่เพื่อดูพยากรณ์ของจุดนั้น</span><span id="radarTime">เรดาร์: –</span></div>
+    <div class="legend" id="legend">
+      <span>ฝนวัดจริง:</span>
+      <span><i style="background:var(--r0)"></i>ไม่มีฝน</span>
+      <span><i style="background:var(--r1)"></i>เล็กน้อย</span>
+      <span><i style="background:var(--r2)"></i>ปานกลาง</span>
+      <span><i style="background:var(--r3)"></i>หนัก</span>
+      <span><i style="background:var(--r4)"></i>หนักมาก</span>
+      <span id="staInfo"></span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>ฝนใน 2 ชั่วโมงข้างหน้า (ทุก 15 นาที)</h2>
+    <div class="rainmsg" id="rainmsg">–</div>
+    <div class="bars" id="bars"></div>
+    <div class="barlbl" id="barlbl"></div>
+  </section>
+
+  <section class="panel">
+    <h2>24 ชั่วโมงข้างหน้า</h2>
+    <div class="hours" id="hours"></div>
+  </section>
+
+  <section class="panel">
+    <h2>7 วัน</h2>
+    <div class="days" id="days"></div>
+  </section>
+
+  <footer>
+    <span><span class="live"></span>อัปเดตอัตโนมัติทุก 10 นาที</span>
+    <span>ข้อมูล: Open-Meteo · เรดาร์ RainViewer · จุดวัดฝน ThaiWater/สนน. กทม. ·แผนที่ © Esri / OpenStreetMap</span>
+  </footer>
+</div>
+
+<script>
+/* ===== ตั้งค่า: วางลิงก์ Web app ของ Google Apps Script (ลงท้ายด้วย /exec) ไว้ในเครื่องหมายคำพูด ===== */
+const GAS_URL = "https://script.google.com/macros/s/AKfycbxMwJg3NrWWO8Npxy6nyaNAJL7CywU-w2X9ejqKyWQ9DeQjav_U5EFR_F8biJgUvjnm6w/exec?api=rain";
+/* ======================================================================================== */
+const DEFAULT = {name:"พระราม 2, กรุงเทพฯ", lat:13.668, lon:100.436};
+const REFRESH_MS = 10*60*1000;
+let loc = DEFAULT, timer = null;
+try { const s = JSON.parse(localStorage.getItem("wx_loc")); if (s && s.lat) loc = s; } catch(e){}
+
+const WMO = {
+  0:["☀️","ท้องฟ้าแจ่มใส"],1:["🌤️","มีเมฆเล็กน้อย"],2:["⛅","มีเมฆบางส่วน"],3:["☁️","เมฆมาก"],
+  45:["🌫️","หมอก"],48:["🌫️","หมอกน้ำค้างแข็ง"],
+  51:["🌦️","ฝนปรอยเบา"],53:["🌦️","ฝนปรอย"],55:["🌧️","ฝนปรอยหนัก"],56:["🌧️","ฝนปรอยเย็นจัด"],57:["🌧️","ฝนปรอยเย็นจัด"],
+  61:["🌦️","ฝนเล็กน้อย"],63:["🌧️","ฝนปานกลาง"],65:["🌧️","ฝนหนัก"],66:["🌧️","ฝนเย็นจัด"],67:["🌧️","ฝนเย็นจัดหนัก"],
+  71:["🌨️","หิมะเล็กน้อย"],73:["🌨️","หิมะ"],75:["❄️","หิมะหนัก"],77:["🌨️","เกล็ดหิมะ"],
+  80:["🌦️","ฝนซู่เล็กน้อย"],81:["🌧️","ฝนซู่"],82:["⛈️","ฝนซู่หนักมาก"],85:["🌨️","หิมะซู่"],86:["🌨️","หิมะซู่หนัก"],
+  95:["⛈️","พายุฝนฟ้าคะนอง"],96:["⛈️","พายุฝน มีลูกเห็บ"],99:["⛈️","พายุฝน ลูกเห็บหนัก"]
+};
+const NIGHT = {0:"🌙",1:"🌙",2:"☁️"};
+const wx = (c,day=1)=> { const w = WMO[c]||["❔","ไม่ทราบ"]; return [(!day && NIGHT[c])||w[0], w[1]]; };
+const $ = id=>document.getElementById(id);
+const hhmm = s => s.slice(11,16);
+const DOW = ["อา.","จ.","อ.","พ.","พฤ.","ศ.","ส."];
+const dirTH = d => ["เหนือ","ตอ.เฉียงเหนือ","ตะวันออก","ตอ.เฉียงใต้","ใต้","ตต.เฉียงใต้","ตะวันตก","ตต.เฉียงเหนือ"][Math.round(d/45)%8];
+
+function uvLabel(u){ if(u==null) return ["–",""]; if(u<3) return ["ต่ำ","var(--accent)"]; if(u<6) return ["ปานกลาง","var(--warn)"]; if(u<8) return ["สูง","var(--warn)"]; return ["สูงมาก","var(--bad)"]; }
+function pmLabel(p){ if(p==null) return ["–",""]; if(p<=15) return ["ดีมาก","var(--accent)"]; if(p<=25) return ["ดี","var(--accent)"]; if(p<=37.5) return ["ปานกลาง","var(--warn)"]; if(p<=75) return ["เริ่มมีผล","var(--bad)"]; return ["มีผลต่อสุขภาพ","var(--bad)"]; }
+const pill = ([t,c]) => c ? `<span class="pill" style="color:${c}">${t}</span>` : "";
+
+async function load(){
+  $("place").textContent = loc.name;
+  $("updated").textContent = "กำลังดึงข้อมูล…";
+  const f = `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}`+
+    `&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,wind_speed_10m,wind_direction_10m,uv_index`+
+    `&minutely_15=precipitation&forecast_minutely_15=8`+
+    `&hourly=temperature_2m,precipitation_probability,weather_code,is_day&forecast_hours=24`+
+    `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset`+
+    `&timezone=auto&forecast_days=7`;
+  const a = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${loc.lat}&longitude=${loc.lon}&current=pm2_5&timezone=auto`;
+  try{
+    const [r, aq] = await Promise.all([
+      fetch(f).then(x=>{ if(!x.ok) throw new Error("HTTP "+x.status); return x.json(); }),
+      fetch(a).then(x=>x.ok?x.json():null).catch(()=>null)
+    ]);
+    render(r, aq);
+    $("updated").textContent = "อัปเดต " + new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"}) + " น.";
+  }catch(e){
+    $("updated").innerHTML = `<span class="err">ดึงข้อมูลไม่สำเร็จ — เช็คอินเทอร์เน็ตแล้วกดรีเฟรช</span>`;
+  }
+}
+
+function render(r, aq){
+  const c = r.current;
+  const [ic, txt] = wx(c.weather_code, c.is_day);
+  $("temp").innerHTML = `${Math.round(c.temperature_2m)}<sup>°C</sup>`;
+  $("cond").textContent = `${ic} ${txt}`;
+  $("feels").textContent = `รู้สึกเหมือน ${Math.round(c.apparent_temperature)}°C`;
+  $("hum").textContent = `${c.relative_humidity_2m}%`;
+  $("wind").textContent = `${Math.round(c.wind_speed_10m)} กม./ชม. ${dirTH(c.wind_direction_10m)}`;
+  $("precip").textContent = `${c.precipitation} มม.`;
+  $("uv").innerHTML = c.uv_index!=null ? `${c.uv_index.toFixed(1)} ${pill(uvLabel(c.uv_index))}` : "–";
+  const pm = aq && aq.current ? aq.current.pm2_5 : null;
+  $("pm").innerHTML = pm!=null ? `${Math.round(pm)} <small>µg/m³</small> ${pill(pmLabel(pm))}` : "–";
+  $("sun").textContent = `${hhmm(r.daily.sunrise[0])} / ${hhmm(r.daily.sunset[0])}`;
+
+  // rain next 2h
+  const m = r.minutely_15 || {time:[],precipitation:[]};
+  const vals = m.precipitation.slice(0,8).map(v=>v||0);
+  const max = Math.max(1, ...vals);
+  $("bars").innerHTML = vals.map(v=>`<div class="bar ${v?"":"zero"}" style="height:${Math.max(4,(v/max)*100)}%" title="${v} มม."></div>`).join("");
+  $("barlbl").innerHTML = m.time.slice(0,8).map(t=>`<span>${hhmm(t)}</span>`).join("");
+  const firstWet = vals.findIndex(v=>v>=0.1);
+  let msg;
+  if (vals[0] >= 0.1) {
+    const stop = vals.findIndex(v=>v<0.1);
+    msg = stop === -1 ? "🌧️ ฝนกำลังตก และน่าจะตกต่อเกิน 2 ชั่วโมง" : `🌧️ ฝนกำลังตก คาดว่าหยุดราว ${hhmm(m.time[stop])} น.`;
+  } else if (firstWet > 0) {
+    msg = `☔ ฝนน่าจะเริ่มตกราว ${hhmm(m.time[firstWet])} น. (อีกประมาณ ${firstWet*15} นาที)`;
+  } else {
+    const ph = r.hourly.precipitation_probability.slice(0,3);
+    msg = `✅ ไม่มีฝนใน 2 ชม.นี้` + (Math.max(...ph)>=50 ? ` แต่ 3 ชม.ข้างหน้ามีโอกาสฝน ${Math.max(...ph)}%` : "");
+  }
+  $("rainmsg").textContent = msg;
+
+  // hourly
+  const h = r.hourly;
+  $("hours").innerHTML = h.time.map((t,i)=>{
+    const [hi] = wx(h.weather_code[i], h.is_day[i]);
+    const p = h.precipitation_probability[i];
+    return `<div class="hr"><div class="t">${i===0?"ตอนนี้":hhmm(t)}</div><div class="i">${hi}</div><div class="d">${Math.round(h.temperature_2m[i])}°</div><div class="p">${p>=20?p+"%":""}</div></div>`;
+  }).join("");
+
+  // daily
+  const d = r.daily;
+  $("days").innerHTML = d.time.map((t,i)=>{
+    const [di, dt] = wx(d.weather_code[i]);
+    const date = new Date(t+"T00:00");
+    const name = i===0 ? "วันนี้" : `${DOW[date.getDay()]} ${date.getDate()}`;
+    const p = d.precipitation_probability_max[i];
+    return `<div class="day"><span class="n">${name}</span><span>${di}</span><span class="c">${dt}</span><span class="p">${p!=null?p+"%":""}</span>
+      <span class="range"><span class="lo">${Math.round(d.temperature_2m_min[i])}°</span><i></i><b>${Math.round(d.temperature_2m_max[i])}°</b></span></div>`;
+  }).join("");
+}
+
+function setLoc(l, fly=true){ loc = l; try{ localStorage.setItem("wx_loc", JSON.stringify(l)); }catch(e){} if (fly) mapGo(); else placeMarker(); restart(); }
+function restart(){ clearInterval(timer); load(); refreshRadar(); showNearest(); timer = setInterval(()=>{ load(); refreshRadar(); loadTemps(); loadStations(); }, REFRESH_MS); }
+
+/* ---------- จุดวัดฝนจริง (ThaiWater ผ่าน Apps Script) ---------- */
+// station = [ชื่อ, lat, lon, ฝน1ชม., ฝน24ชม., เวลา, หน่วยงาน, เขต, จังหวัด]
+let stations = [], staLayer = null, showSta = true, staMode = "1h";
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function rainLevel(v, mode){
+  if (v == null || v < 0.1) return 0;
+  const t = mode === "1h" ? [2, 10, 30] : [10, 35, 90];   // เกณฑ์กรมอุตุฯ สำหรับ 24 ชม.
+  return v <= t[0] ? 1 : v <= t[1] ? 2 : v <= t[2] ? 3 : 4;
+}
+const LVL_TH = ["ไม่มีฝน","ฝนเล็กน้อย","ฝนปานกลาง","ฝนหนัก","ฝนหนักมาก"];
+function distKm(a,b,c,d){ const R=6371, r=Math.PI/180, x=(d-b)*r*Math.cos((a+c)/2*r), y=(c-a)*r; return Math.sqrt(x*x+y*y)*R; }
+const esc = s => String(s).replace(/[&<>"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
+
+const IN_GAS = !!(window.google && google.script && google.script.run);
+function fetchStations(){
+  if (IN_GAS) return new Promise((ok, fail) => google.script.run.withSuccessHandler(ok).withFailureHandler(fail).getStations());
+  return fetch(GAS_URL).then(r => r.json());
+}
+async function loadStations(){
+  if (!IN_GAS && !GAS_URL) {
+    $("staInfo").textContent = "ยังไม่ได้ตั้งค่า GAS_URL";
+    $("near").textContent = "ตั้งค่า Apps Script ก่อนจึงจะแสดง";
+    return;
+  }
+  $("staInfo").textContent = "กำลังโหลดจุดวัด…";
+  try{
+    const j = await fetchStations();
+    stations = j.stations || [];
+    const latest = stations.map(s=>s[5]).filter(Boolean).sort().pop();
+    $("staInfo").textContent = `${stations.length} จุดวัด · ข้อมูลล่าสุด ${latest ? latest.slice(11,16)+" น." : "–"}`;
+    drawStations(); showNearest();
+  }catch(e){
+    $("staInfo").innerHTML = '<span class="err">โหลดจุดวัดไม่สำเร็จ</span>';
+  }
+}
+function drawStations(){
+  if (!map) return;
+  if (!staLayer) staLayer = L.layerGroup().addTo(map);
+  staLayer.clearLayers();
+  if (!showSta) return;
+  const col = [cssVar("--r0"),cssVar("--r1"),cssVar("--r2"),cssVar("--r3"),cssVar("--r4")];
+  stations.forEach(s=>{
+    const v = staMode === "1h" ? s[3] : s[4], lv = rainLevel(v, staMode);
+    L.circleMarker([s[1], s[2]], {radius: lv ? 6 + lv*2 : 4, color:"#fff", weight:1, fillColor:col[lv], fillOpacity: lv ? .9 : .6})
+      .bindPopup(`<div class="pop"><b>${esc(s[0])}</b><br><small>${esc(s[7])} ${esc(s[8])} · ${esc(s[6])}</small>
+        <table><tr><td>ฝน 1 ชม.</td><td><b>${s[3] ?? "–"}</b> มม.</td></tr><tr><td>ฝน 24 ชม.</td><td><b>${s[4] ?? "–"}</b> มม.</td></tr>
+        <tr><td>เวลาวัด</td><td>${esc((s[5]||"").slice(11,16))} น.</td></tr></table></div>`)
+      .addTo(staLayer);
+  });
+}
+function showNearest(){
+  if (!stations.length) return;
+  let best = null, bd = 1e9;
+  stations.forEach(s=>{ const d = distKm(loc.lat, loc.lon, s[1], s[2]); if (d < bd) { bd = d; best = s; } });
+  if (!best || bd > 30) { $("near").textContent = "ไม่มีจุดวัดในรัศมี 30 กม."; return; }
+  const lv = rainLevel(best[3], "1h");
+  $("near").innerHTML = `${esc(best[0])} <small>(${bd.toFixed(1)} กม.)</small> — ฝน 1 ชม. <b>${best[3] ?? "–"}</b> มม. · 24 ชม. <b>${best[4] ?? "–"}</b> มม. ${pill([LVL_TH[lv], lv ? "var(--rain)" : "var(--muted)"])}`;
+}
+$("tSta").onclick = ()=>{ showSta = !showSta; $("tSta").setAttribute("aria-pressed", showSta); drawStations(); };
+$("tMode").onclick = ()=>{ staMode = staMode === "1h" ? "24h" : "1h"; $("tMode").textContent = "แสดง: " + (staMode === "1h" ? "1 ชม." : "24 ชม."); drawStations(); };
+
+/* ---------- MAP ---------- */
+let map = null, marker = null, radarLayers = [], radarFrames = [], radarIdx = 0, radarTimer = null;
+let showRadar = true, playing = true, showTemp = true, tempLayer = null, tempTimer = null;
+
+function initMap(){
+  if (!window.L) { $("map").innerHTML = '<p class="err" style="padding:16px">โหลดแผนที่ไม่ได้ — เช็คอินเทอร์เน็ต</p>'; return; }
+  map = L.map("map", {zoomControl:true}).setView([loc.lat, loc.lon], 10);
+  const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+  // Basemap: Esri (no key). If its tiles fail, fall back to OpenStreetMap.
+  const esri = dark
+    ? "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+    : "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}";
+  let base = L.tileLayer(esri, {maxZoom:18, maxNativeZoom: dark ? 16 : 18, attribution:'Tiles &copy; Esri'}).addTo(map);
+  if (dark) L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}", {maxZoom:18, maxNativeZoom:16, zIndex:4}).addTo(map);
+  let errs = 0, switched = false;
+  base.on("tileerror", ()=>{
+    if (switched || ++errs < 4) return;
+    switched = true; map.removeLayer(base);
+    base = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom:19,
+      attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map);
+  });
+  tempLayer = L.layerGroup().addTo(map);
+  placeMarker();
+  map.on("click", e => setLoc({name:`จุดที่เลือก (${e.latlng.lat.toFixed(3)}, ${e.latlng.lng.toFixed(3)})`, lat:+e.latlng.lat.toFixed(3), lon:+e.latlng.lng.toFixed(3)}, false));
+  map.on("moveend", ()=>{ clearTimeout(tempTimer); tempTimer = setTimeout(loadTemps, 500); });
+  loadTemps();
+}
+function placeMarker(){
+  if (!map) return;
+  if (marker) marker.setLatLng([loc.lat, loc.lon]); else marker = L.marker([loc.lat, loc.lon]).addTo(map);
+  marker.bindTooltip(loc.name);
+}
+function mapGo(){ if (!map) return; placeMarker(); map.setView([loc.lat, loc.lon], Math.max(map.getZoom(), 10)); }
+
+// rain radar (RainViewer, past ~2h, every 10 min)
+async function refreshRadar(){
+  if (!map) return;
+  try{
+    const j = await fetch("https://api.rainviewer.com/public/weather-maps.json").then(r=>r.json());
+    const frames = [...(j.radar.past||[]), ...(j.radar.nowcast||[])];
+    radarLayers.forEach(l=>map.removeLayer(l));
+    radarFrames = frames;
+    radarLayers = frames.map(f => L.tileLayer(`${j.host}${f.path}/256/{z}/{x}/{y}/2/1_1.png`, {opacity:0, maxNativeZoom:7, maxZoom:18, zIndex:5}));
+    if (showRadar) radarLayers.forEach(l=>l.addTo(map));
+    radarIdx = Math.max(0, (j.radar.past||[]).length - 1);
+    showFrame(radarIdx);
+    setPlay(playing);
+  }catch(e){ $("radarTime").textContent = "เรดาร์: โหลดไม่สำเร็จ"; }
+}
+function showFrame(i){
+  if (!radarLayers.length) return;
+  radarLayers.forEach((l,k)=>l.setOpacity(showRadar && k===i ? .7 : 0));
+  const t = new Date(radarFrames[i].time*1000);
+  const ahead = radarFrames[i].time*1000 > Date.now();
+  $("radarTime").textContent = `เรดาร์${ahead?" (คาดการณ์)":""}: ${t.toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"})} น.`;
+}
+function setPlay(on){
+  playing = on; clearInterval(radarTimer);
+  $("tPlay").setAttribute("aria-pressed", on); $("tPlay").textContent = on ? "⏸ หยุด" : "▶ เล่นย้อนหลัง";
+  if (on && radarLayers.length) radarTimer = setInterval(()=>{ radarIdx = (radarIdx+1) % radarLayers.length; showFrame(radarIdx); }, 700);
+  else if (radarLayers.length) { radarIdx = radarLayers.length-1; showFrame(radarIdx); }
+}
+
+// temperature labels on a grid across the visible map
+async function loadTemps(){
+  if (!map || !showTemp) return;
+  const b = map.getBounds(), R = 3, C = 4, lats = [], lons = [];
+  for (let r=0;r<R;r++) for (let c=0;c<C;c++){
+    lats.push((b.getSouth() + (b.getNorth()-b.getSouth())*(r+.5)/R).toFixed(3));
+    lons.push((b.getWest() + (b.getEast()-b.getWest())*(c+.5)/C).toFixed(3));
+  }
+  try{
+    let res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lats.join(",")}&longitude=${lons.join(",")}&current=temperature_2m,weather_code,is_day,precipitation&timezone=auto`).then(r=>r.json());
+    if (!Array.isArray(res)) res = [res];
+    tempLayer.clearLayers();
+    res.forEach((p,i)=>{
+      const c = p.current; if (!c) return;
+      const [ic, txt] = wx(c.weather_code, c.is_day);
+      const rain = c.precipitation > 0 ? `<small>${c.precipitation}มม.</small>` : "";
+      L.marker([+lats[i], +lons[i]], {interactive:false, icon:L.divIcon({className:"", html:`<span class="tlabel" title="${txt}">${ic} ${Math.round(c.temperature_2m)}°${rain}</span>`, iconSize:[0,0]})}).addTo(tempLayer);
+    });
+  }catch(e){}
+}
+
+$("tRadar").onclick = ()=>{ showRadar = !showRadar; $("tRadar").setAttribute("aria-pressed", showRadar);
+  radarLayers.forEach(l=> showRadar ? l.addTo(map) : map.removeLayer(l)); showFrame(radarIdx); };
+$("tPlay").onclick = ()=> setPlay(!playing);
+$("tTemp").onclick = ()=>{ showTemp = !showTemp; $("tTemp").setAttribute("aria-pressed", showTemp);
+  if (showTemp) loadTemps(); else tempLayer.clearLayers(); };
+if (matchMedia("(prefers-reduced-motion: reduce)").matches) playing = false;
+initMap();
+loadStations();
+
+// search
+let st;
+$("q").addEventListener("input", e=>{
+  clearTimeout(st); const q = e.target.value.trim();
+  if (q.length < 2) { $("results").hidden = true; return; }
+  st = setTimeout(async ()=>{
+    try{
+      const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=th`).then(x=>x.json());
+      const list = r.results || [];
+      $("results").innerHTML = list.length ? list.map((p,i)=>`<button type="button" data-i="${i}">${p.name} <small>${[p.admin1,p.country].filter(Boolean).join(", ")}</small></button>`).join("")
+        : `<button type="button" disabled>ไม่พบสถานที่</button>`;
+      $("results").hidden = false;
+      $("results").querySelectorAll("button[data-i]").forEach(b=>b.onclick=()=>{
+        const p = list[b.dataset.i];
+        setLoc({name:[p.name,p.admin1].filter(Boolean).join(", "), lat:p.latitude, lon:p.longitude});
+        $("results").hidden = true; $("q").value = "";
+      });
+    }catch(err){}
+  }, 350);
+});
+document.addEventListener("click", e=>{ if(!e.target.closest(".search")) $("results").hidden = true; });
+
+// GPS ก่อน ถ้าใช้ไม่ได้ (เช่นในหน้า Apps Script) ให้หาตำแหน่งโดยประมาณจาก IP แทน
+async function locateByIP(){
+  try{
+    const g = await fetch("https://get.geojs.io/v1/ip/geo.json").then(r=>r.json());
+    if (!g.latitude) throw new Error("no location");
+    setLoc({name:`ตำแหน่งโดยประมาณ${g.city ? " ("+g.city+")" : ""} · แตะแผนที่เพื่อปักหมุดให้ตรง`, lat:+(+g.latitude).toFixed(3), lon:+(+g.longitude).toFixed(3)});
+  }catch(e){
+    $("updated").innerHTML = `<span class="err">หาตำแหน่งไม่ได้ — ค้นหาชื่อเขตหรือแตะบนแผนที่แทน</span>`;
+  }
+}
+$("gps").onclick = ()=>{
+  $("updated").textContent = "กำลังหาตำแหน่ง…";
+  if (!navigator.geolocation) return locateByIP();
+  navigator.geolocation.getCurrentPosition(
+    p => setLoc({name:"ตำแหน่งปัจจุบัน (GPS)", lat:+p.coords.latitude.toFixed(3), lon:+p.coords.longitude.toFixed(3)}),
+    () => locateByIP(),
+    {enableHighAccuracy:true, timeout:8000}
+  );
+};
+$("refresh").onclick = load;
+document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) load(); });
+restart();
+</script>
+</body>
+</html>

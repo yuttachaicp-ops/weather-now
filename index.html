@@ -99,6 +99,55 @@ footer{font-size:12px;color:var(--muted);display:flex;justify-content:space-betw
   .temp{font-size:58px}
   .day{grid-template-columns:52px 26px 1fr 42px 92px;gap:6px}
 }
+/* ===== ปรับตามอุปกรณ์: PC (≥1024px) / แท็บเล็ต / มือถือ (<700px) ===== */
+.bnav{display:none}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+@media (min-width:1024px){
+  .wrap{max-width:1360px;grid-template-columns:minmax(0,1.35fr) minmax(360px,1fr);align-items:start;
+    grid-template-areas:"head head" "map now" "map rain" "map hours" "map days" "foot foot";grid-template-rows:auto auto auto auto 1fr auto}
+  header{grid-area:head}
+  .area-now{grid-area:now}
+  .area-map{grid-area:map;position:sticky;top:calc(env(safe-area-inset-top,0px) + 16px)}
+  .area-rain{grid-area:rain}
+  .area-hours{grid-area:hours}
+  .area-days{grid-area:days}
+  footer{grid-area:foot}
+  #map{height:calc(100vh - 230px);min-height:520px}
+  h1{font-size:26px}
+  .temp{font-size:80px}
+}
+@media (min-width:700px) and (max-width:1023px){
+  .wrap{max-width:900px}
+  #map{height:480px}
+}
+@media (max-width:699px){
+  body{padding:12px;padding-block:0 calc(76px + env(safe-area-inset-bottom,0px));font-size:14px}
+  .wrap{gap:12px}
+  header{position:sticky;top:0;z-index:1001;background:var(--bg);margin-inline:-12px;padding:10px 12px 8px}
+  h1{font-size:20px}
+  .tools{flex:1 1 100%;flex-wrap:nowrap}
+  .search{max-width:none;min-width:0}
+  .tools button{padding:9px 12px;min-width:44px}
+  .lbl{display:none}
+  .panel{padding:14px;border-radius:14px}
+  .temp{font-size:56px}
+  .cond{font-size:17px}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .mapbar{flex-direction:column;align-items:stretch}
+  .mapbtns{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
+  .mapbtns::-webkit-scrollbar{display:none}
+  .mapbtns button{flex:0 0 auto;padding:8px 12px}
+  #map{height:62vh;min-height:320px}
+  .legend #staInfo{margin-left:0;flex-basis:100%}
+  .day{grid-template-columns:48px 24px minmax(0,1fr) 38px 88px;gap:6px}
+  section{scroll-margin-top:72px}
+  .bnav{display:grid;grid-template-columns:repeat(4,1fr);position:fixed;left:0;right:0;bottom:0;z-index:1100;
+    background:var(--panel);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+  .bnav a{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 0 10px;color:var(--muted);text-decoration:none;font-size:11px;font-weight:600}
+  .bnav a span{font-size:20px;line-height:1}
+  .bnav a.on{color:var(--accent)}
+}
+@media (pointer:coarse){button{min-height:44px}.mapbtns button{min-height:40px}}
 </style>
 </head>
 <body>
@@ -110,12 +159,12 @@ footer{font-size:12px;color:var(--muted);display:flex;justify-content:space-betw
         <input id="q" type="search" placeholder="ค้นหาเมือง/เขต เช่น บางขุนเทียน" autocomplete="off">
         <div class="results" id="results" hidden></div>
       </div>
-      <button id="gps" type="button">📍 ตำแหน่งฉัน</button>
-      <button id="refresh" type="button">รีเฟรช</button>
+      <button id="gps" type="button" title="ตำแหน่งฉัน">📍<span class="lbl"> ตำแหน่งฉัน</span></button>
+      <button id="refresh" type="button" title="รีเฟรช">⟳<span class="lbl"> รีเฟรช</span></button>
     </div>
   </header>
 
-  <section class="panel now" id="now">
+  <section class="panel now area-now" id="now">
     <div class="place"><b id="place">กำลังโหลด…</b><span id="updated"></span></div>
     <div class="temp" id="temp">--<sup>°C</sup></div>
     <div><div class="cond" id="cond">&nbsp;</div><div class="feels" id="feels">&nbsp;</div></div>
@@ -130,7 +179,7 @@ footer{font-size:12px;color:var(--muted);display:flex;justify-content:space-betw
     </div>
   </section>
 
-  <section class="panel">
+  <section class="panel area-map" id="sec-map">
     <div class="mapbar">
       <h2>แผนที่สภาพอากาศ</h2>
       <div class="mapbtns">
@@ -154,19 +203,19 @@ footer{font-size:12px;color:var(--muted);display:flex;justify-content:space-betw
     </div>
   </section>
 
-  <section class="panel">
+  <section class="panel area-rain" id="sec-rain">
     <h2>ฝนใน 2 ชั่วโมงข้างหน้า (ทุก 15 นาที)</h2>
     <div class="rainmsg" id="rainmsg">–</div>
     <div class="bars" id="bars"></div>
     <div class="barlbl" id="barlbl"></div>
   </section>
 
-  <section class="panel">
+  <section class="panel area-hours" id="sec-hours">
     <h2>24 ชั่วโมงข้างหน้า</h2>
     <div class="hours" id="hours"></div>
   </section>
 
-  <section class="panel">
+  <section class="panel area-days" id="sec-days">
     <h2>7 วัน</h2>
     <div class="days" id="days"></div>
   </section>
@@ -176,6 +225,13 @@ footer{font-size:12px;color:var(--muted);display:flex;justify-content:space-betw
     <span>ข้อมูล: Open-Meteo · เรดาร์ RainViewer · จุดวัดฝน ThaiWater/สนน. กทม. ·แผนที่ © Esri / OpenStreetMap</span>
   </footer>
 </div>
+
+<nav class="bnav" aria-label="เมนูลัด">
+  <a href="#now" class="on"><span>🌡️</span>ตอนนี้</a>
+  <a href="#sec-map"><span>🗺️</span>แผนที่</a>
+  <a href="#sec-rain"><span>☔</span>ฝน 2 ชม.</a>
+  <a href="#sec-days"><span>📅</span>7 วัน</a>
+</nav>
 
 <script>
 /* ===== ตั้งค่า: วางลิงก์ Web app ของ Google Apps Script (ลงท้ายด้วย /exec) ไว้ในเครื่องหมายคำพูด ===== */
@@ -437,6 +493,23 @@ $("tTemp").onclick = ()=>{ showTemp = !showTemp; $("tTemp").setAttribute("aria-p
 if (matchMedia("(prefers-reduced-motion: reduce)").matches) playing = false;
 initMap();
 loadStations();
+
+// ปรับตามอุปกรณ์: ติดป้าย pc / tablet / phone ที่ <html> และจัดขนาดแผนที่ใหม่เมื่อหมุนจอหรือย่อหน้าต่าง
+function setDevice(){
+  const w = innerWidth;
+  document.documentElement.dataset.device = w >= 1024 ? "pc" : w >= 700 ? "tablet" : "phone";
+  if (map) map.invalidateSize();
+}
+let rzT; addEventListener("resize", ()=>{ clearTimeout(rzT); rzT = setTimeout(setDevice, 150); });
+setDevice();
+// เมนูล่าง (มือถือ): ไฮไลต์ส่วนที่กำลังดู
+const navLinks = [...document.querySelectorAll(".bnav a")];
+if ("IntersectionObserver" in window) {
+  const io = new IntersectionObserver(es => es.forEach(e => {
+    if (e.isIntersecting) navLinks.forEach(a => a.classList.toggle("on", a.getAttribute("href") === "#" + e.target.id));
+  }), {rootMargin:"-45% 0px -50% 0px"});
+  ["now","sec-map","sec-rain","sec-days"].forEach(id => { const el = $(id); if (el) io.observe(el); });
+}
 
 // search
 let st;
